@@ -1,0 +1,27 @@
+SSH_BRUTE_FORCE:
+  - step: enrich
+  - step: block
+  - step: notify
+  - step: record
+
+HTTP_ATTACK:
+  - step: enrich
+  - step: block
+  - step: record
+
+PORT_SCAN:
+  - step: enrich
+  - step: block
+  - step: record
+
+SYN_FLOOD:
+  - step: enrich
+  - step: block
+  - step: notify
+  - step: record
+
+SCAN_THEN_BRUTE:
+  - step: enrich
+  - step: block
+  - step: notify
+  - step: record

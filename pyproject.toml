@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xdp-engine"
+version = "1.0.0"
+description = "Python eBPF/XDP Intrusion Mitigation & SOAR Engine"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "Flask>=3.0.0",
+    "PyYAML>=6.0.0",
+    "requests>=2.31.0",
+    "psutil>=5.9.0",
+]
+
+[project.scripts]
+xdp-engine = "xdp_engine.engine:main"
+xdp-cli = "xdp_engine.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["xdp_engine*", "dashboard*"]

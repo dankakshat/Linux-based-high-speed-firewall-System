@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>XDP-Engine | Security Operations Dashboard</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #131a2e;
+      --border: #232d4b;
+      --text: #e6ecff;
+      --muted: #8b98be;
+      --blue: #3b82f6;
+      --red: #ef4444;
+      --green: #22c55e;
+      --amber: #f59e0b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 20px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .title h1 { margin: 0; font-size: 1.5rem; }
+    .title p { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; }
+    .nav-actions { display: flex; align-items: center; gap: 12px; }
+    .btn {
+      text-decoration: none;
+      color: var(--text);
+      border: 1px solid var(--border);
+      background: var(--panel);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+    }
+    .badge {
+      padding: 8px 16px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      letter-spacing: 0.05em;
+    }
+    .badge-enforce { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid var(--red); }
+    .badge-detect { background: rgba(59, 130, 246, 0.2); color: #93c5fd; border: 1px solid var(--blue); }
+    .badge-offline { background: rgba(139, 152, 190, 0.15); color: var(--muted); border: 1px solid var(--border); }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .kpi-label { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; }
+    .kpi-value { font-size: 1.75rem; font-weight: 700; margin-top: 6px; }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    h2 { margin: 0 0 12px; font-size: 1.05rem; color: var(--text); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .sev-critical { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+    .sev-high { background: rgba(245, 158, 11, 0.2); color: #fcd34d; }
+    .sev-medium { background: rgba(59, 130, 246, 0.2); color: #93c5fd; }
+    .feed { max-height: 280px; overflow-y: auto; font-family: ui-monospace, monospace; font-size: 0.82rem; }
+    .feed-row { padding: 6px 0; border-bottom: 1px solid rgba(35, 45, 75, 0.5); }
+    .bar-wrap { display: flex; flex-direction: column; gap: 10px; }
+    .bar-row { display: grid; grid-template-columns: 70px 1fr 75px; align-items: center; gap: 10px; font-size: 0.85rem; }
+    .bar-track { height: 12px; background: #0d1324; border-radius: 999px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 999px; transition: width 0.3s ease; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">
+      <h1>XDP-Engine Telemetry Console</h1>
+      <p id="metaLine">Interface: - | Backend: -</p>
+    </div>
+    <div class="nav-actions">
+      <a class="btn" href="/?showcase=1">Showcase View</a>
+      <span id="modeBadge" class="badge badge-offline">OFFLINE</span>
+    </div>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="card">
+      <div class="kpi-label">Packets Dropped</div>
+      <div class="kpi-value" id="kpiDropped" style="color: var(--red);">0</div>
+    </div>
+    <div class="card">
+      <div class="kpi-label">Drop Velocity</div>
+      <div class="kpi-value" id="kpiRate">0 pps</div>
+    </div>
+    <div class="card">
+      <div class="kpi-label">Packets Passed</div>
+      <div class="kpi-value" id="kpiPassed" style="color: var(--green);">0</div>
+    </div>
+    <div class="card">
+      <div class="kpi-label">Active Blocks</div>
+      <div class="kpi-value" id="kpiBlocks" style="color: var(--amber);">0</div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h2>Protocol Breakdown</h2>
+      <div class="bar-wrap">
+        <div class="bar-row">
+          <span>TCP</span>
+          <div class="bar-track"><div id="barTcp" class="bar-fill" style="width:0%; background:#3b82f6;"></div></div>
+          <span id="valTcp">0</span>
+        </div>
+        <div class="bar-row">
+          <span>UDP</span>
+          <div class="bar-track"><div id="barUdp" class="bar-fill" style="width:0%; background:#22c55e;"></div></div>
+          <span id="valUdp">0</span>
+        </div>
+        <div class="bar-row">
+          <span>ICMP</span>
+          <div class="bar-track"><div id="barIcmp" class="bar-fill" style="width:0%; background:#f59e0b;"></div></div>
+          <span id="valIcmp">0</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Active Kernel / Filter Blocks</h2>
+      <table>
+        <thead>
+          <tr><th>IP</th><th>Reason</th><th>Hits</th><th>TTL</th></tr>
+        </thead>
+        <tbody id="blocksBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h2>Recent Security Alerts</h2>
+      <table>
+        <thead>
+          <tr><th>Rule</th><th>Source IP</th><th>Severity</th><th>Action</th></tr>
+        </thead>
+        <tbody id="alertsBody"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Live Engine Feed</h2>
+      <div id="feedBox" class="feed"></div>
+    </div>
+  </div>
+
+  <script>
+    function fmtTime(ts) {
+      if (!ts) return "";
+      return new Date(ts * 1000).toLocaleTimeString();
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = String(text ?? "");
+      return div.innerHTML;
+    }
+
+    async function refresh() {
+      try {
+        const res = await fetch("/api/overview");
+        const data = await res.json();
+        const st = data.status;
+
+        document.getElementById("metaLine").textContent =
+          `Interface: ${st.interface} | Backend: ${st.backend} | Status: ${st.status}`;
+
+        const badge = document.getElementById("modeBadge");
+        if (st.status !== "ONLINE") {
+          badge.textContent = "OFFLINE";
+          badge.className = "badge badge-offline";
+        } else if (st.mode === "enforce") {
+          badge.textContent = "ENFORCE MODE";
+          badge.className = "badge badge-enforce";
+        } else {
+          badge.textContent = "DETECT MODE";
+          badge.className = "badge badge-detect";
+        }
+
+        document.getElementById("kpiDropped").textContent = st.dropped.toLocaleString();
+        document.getElementById("kpiRate").textContent = `${st.drop_rate_pps} pps`;
+        document.getElementById("kpiPassed").textContent = st.passed.toLocaleString();
+        document.getElementById("kpiBlocks").textContent = data.blocks.length;
+
+        const maxProto = Math.max(1, st.tcp, st.udp, st.icmp);
+        document.getElementById("barTcp").style.width = `${(st.tcp / maxProto) * 100}%`;
+        document.getElementById("barUdp").style.width = `${(st.udp / maxProto) * 100}%`;
+        document.getElementById("barIcmp").style.width = `${(st.icmp / maxProto) * 100}%`;
+        document.getElementById("valTcp").textContent = st.tcp.toLocaleString();
+        document.getElementById("valUdp").textContent = st.udp.toLocaleString();
+        document.getElementById("valIcmp").textContent = st.icmp.toLocaleString();
+
+        document.getElementById("blocksBody").innerHTML = data.blocks.length
+          ? data.blocks.map(b => `
+              <tr>
+                <td><code>${escapeHtml(b.ip)}</code></td>
+                <td>${escapeHtml(b.reason)}</td>
+                <td>${b.hits}</td>
+                <td>${b.remaining_seconds < 0 ? "permanent" : b.remaining_seconds + "s"}</td>
+              </tr>`).join("")
+          : `<tr><td colspan="4" style="color:var(--muted)">No active blocks</td></tr>`;
+
+        document.getElementById("alertsBody").innerHTML = data.alerts.length
+          ? data.alerts.slice(0, 12).map(a => `
+              <tr>
+                <td>${escapeHtml(a.rule_name)}</td>
+                <td><code>${escapeHtml(a.src_ip)}</code></td>
+                <td><span class="pill sev-${escapeHtml(a.severity)}">${escapeHtml(a.severity)}</span></td>
+                <td>${a.enforced ? "ENFORCED" : "AUDITED"}</td>
+              </tr>`).join("")
+          : `<tr><td colspan="4" style="color:var(--muted)">No alerts yet</td></tr>`;
+
+        document.getElementById("feedBox").innerHTML = data.feed.length
+          ? data.feed.map(f => `
+              <div class="feed-row">
+                <span style="color:var(--muted)">[${fmtTime(f.timestamp)}]</span>
+                <strong>[${escapeHtml(f.category)}]</strong>
+                ${escapeHtml(f.message)}
+              </div>`).join("")
+          : `<div style="color:var(--muted)">Waiting for telemetry...</div>`;
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 1000);
+  </script>
+</body>
+</html>

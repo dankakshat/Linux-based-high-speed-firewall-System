@@ -1,0 +1,1 @@
+# Static IP blocklist loaded on startup (one IP per line)
